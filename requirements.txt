@@ -1,9 +1,39 @@
-flask
-eciespy
-qrcode
-opencv-python-headless
-cryptography
-pillow
-requests
-numpy
-gunicorn
+# ─────────────────────────────────────────────────────────────────
+#  FIDO Cloud — Python Dependencies (Ubuntu / Linux)
+#  Install:  pip install -r requirements.txt
+#
+#  Python built-ins used (no install needed):
+#    sqlite3, hmac, hashlib, binascii, base64, os, sys,
+#    json, struct, smtplib, email, random, math
+# ─────────────────────────────────────────────────────────────────
+
+# ── Web Framework ─────────────────────────────────────────────────
+Flask>=2.3.0
+
+# ── Cryptography / ECIES ──────────────────────────────────────────
+eciespy>=0.3.13
+cryptography>=41.0.0      # Fernet (encrpycode.py) + eciespy dependency
+
+# ── QR Code Generation ────────────────────────────────────────────
+qrcode[pil]>=7.4.2        # [pil] extra pulls Pillow automatically
+
+# ── Image Processing ──────────────────────────────────────────────
+Pillow>=10.0.0            # required by qrcode & trackerMemoryTool
+numpy>=1.24.0             # face descriptor comparison in App.py
+
+# ── HTTP Requests ─────────────────────────────────────────────────
+requests>=2.31.0          # used in LiveRecognition1.py (SMS API)
+
+# ── Production WSGI Server ────────────────────────────────────────
+gunicorn>=21.2.0
+
+# ─────────────────────────────────────────────────────────────────
+#  NOTE: opencv-python-headless is intentionally EXCLUDED.
+#
+#  The app now uses browser-based face-api.js and jsQR for all
+#  camera / QR operations. OpenCV (xrhas.py) was a legacy Windows
+#  dev script and is NOT used by the Flask app on Ubuntu.
+#
+#  If you still need OpenCV for local testing:
+#    pip install opencv-python-headless>=4.8.0
+# ─────────────────────────────────────────────────────────────────
