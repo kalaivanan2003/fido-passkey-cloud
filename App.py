@@ -933,5 +933,16 @@ def sendmail(Mailid, message):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5000)
-    # app.run(debug=True, use_reloader=True)
+    _ssl_cert = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'ssl', 'cert.pem')
+    _ssl_key  = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'ssl', 'key.pem')
+
+    if _os.path.exists(_ssl_cert) and _os.path.exists(_ssl_key):
+        print("[SSL] Certificate found — starting HTTPS on port 5000")
+        print("      Access: https://YOUR-EC2-IP:5000")
+        print("      (Accept the browser's self-signed cert warning, then camera will work)")
+        app.run(host='0.0.0.0', port=5000, debug=False,
+                ssl_context=(_ssl_cert, _ssl_key))
+    else:
+        print("[SSL] No certificate found — starting plain HTTP (camera blocked on remote URLs)")
+        print("      To enable HTTPS: run  bash generate_ssl.sh  then restart")
+        app.run(host='0.0.0.0', port=5000, debug=True)

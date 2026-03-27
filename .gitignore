@@ -25,6 +25,14 @@ ENV/
 *.secret
 
 # ─────────────────────────────────────────────
+# SSL Certificates  (generated per-server, never commit private keys)
+# ─────────────────────────────────────────────
+ssl/
+*.pem
+*.key
+*.crt
+
+# ─────────────────────────────────────────────
 # SQLite Database  (runtime data — not source)
 # ─────────────────────────────────────────────
 *.sqlite
