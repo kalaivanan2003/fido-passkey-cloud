@@ -116,10 +116,9 @@ def serverlogin():
 
             conn = get_db()
             cur = conn.cursor()
-            cur.execute("SELECT * FROM regtb where status='waiting'")
+            cur.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
             data = cur.fetchall()
-
-            cur.execute("SELECT * FROM regtb where status!='waiting'")
+            cur.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
             data1 = cur.fetchall()
             conn.close()
             return render_template('ServerHome.html', data=data, data1=data1)
@@ -133,9 +132,9 @@ def serverlogin():
 def ServerHome():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM regtb where status='waiting'")
+    cur.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
     data = cur.fetchall()
-    cur.execute("SELECT * FROM regtb where status!='waiting'")
+    cur.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cur.fetchall()
     conn.close()
     return render_template('ServerHome.html', data=data, data1=data1)
@@ -188,13 +187,13 @@ def Approved():
     sendmail(email, "FIDOKEY:" + prikey2 + "\nServer Process Completed Awaiting Backup Server")
 
     cursor.execute(
-        "UPDATE regtb SET Status='Awaiting Backup Server', prikey1=?, prikey2=? WHERE id=?",
+        "UPDATE regtb SET Status='awaiting backup server', prikey1=?, prikey2=? WHERE id=?",
         (privhex1, prikey2, uid))
     conn.commit()
 
-    cursor.execute("SELECT * FROM regtb where status='waiting'")
+    cursor.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
     data = cursor.fetchall()
-    cursor.execute("SELECT * FROM regtb where status!='waiting'")
+    cursor.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cursor.fetchall()
     conn.close()
     return render_template('ServerHome.html', data=data, data1=data1)
@@ -212,9 +211,9 @@ def Reject():
     cursor.execute("UPDATE regtb SET Status='reject' WHERE id=?", (id,))
     conn.commit()
 
-    cursor.execute("SELECT * FROM regtb where status='waiting'")
+    cursor.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
     data = cursor.fetchall()
-    cursor.execute("SELECT * FROM regtb where status !='waiting'")
+    cursor.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cursor.fetchall()
     conn.close()
 
@@ -247,9 +246,9 @@ def bslogin():
 def BackupServerHome():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM regtb where status='Awaiting Backup Server'")
+    cur.execute("SELECT * FROM regtb WHERE LOWER(status)='awaiting backup server'")
     data = cur.fetchall()
-    cur.execute("SELECT * FROM regtb where status!='waiting'")
+    cur.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cur.fetchall()
     conn.close()
     return render_template('BackupServerHome.html', data=data, data1=data1)
@@ -317,7 +316,7 @@ def QrApproved():
     Qrcode = str(pn) + ".png"
     print(Qrcode)
 
-    cursor.execute("UPDATE regtb SET Status='Approved' WHERE id=?", (uid,))
+    cursor.execute("UPDATE regtb SET Status='approved' WHERE id=?", (uid,))
     conn.commit()
 
     cursor.execute("SELECT * FROM backuptb")
@@ -447,7 +446,7 @@ def newuser():
         if data is None:
             cursor.execute(
                 "INSERT INTO regtb (Name, Mobile, Email, Address, UserName, Password, Status, Pubkey, Prikey, prikey1, prikey2) "
-                "VALUES (?,?,?,?,?,?,'Waiting',?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,'waiting',?,?,?,?)",
                 (uname, mobile, email, address, username, password, pubhex, privhex, '', ''))
             conn.commit()
             conn.close()
@@ -480,7 +479,7 @@ def userlogin():
 
         else:
 
-            Status = data[7]
+            Status = data[7].lower() if data[7] else ''
             session['fidokey'] = data[11]
             # print(lkey)
 
@@ -489,7 +488,7 @@ def userlogin():
                 flash('Waiting For Server Approved!')
                 return render_template('UserLogin.html')
 
-            elif Status == "Awaiting Backup Server":
+            elif Status == "awaiting backup server":
                 flash('Awaiting Backup Server...!')
                 return render_template('UserLogin.html')
 

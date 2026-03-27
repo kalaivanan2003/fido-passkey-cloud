@@ -73,6 +73,10 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 print_ok "Python packages installed."
 
+# Normalise any existing DB status values to lowercase (one-time safe migration)
+echo "  Running status normalisation..."
+python fix_status.py 2>/dev/null || true
+
 # ──────────────────────────────────────────────────────────
 # STEP 5: Check Flask host configuration
 # ──────────────────────────────────────────────────────────
