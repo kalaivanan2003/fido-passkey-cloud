@@ -704,88 +704,84 @@ def UserHome():
 
 @app.route('/UserFileUpload')
 def UserFileUpload():
+    if 'uname' not in session:
+        flash('Session expired. Please log in again.')
+        return redirect('/UserLogin')
     return render_template('UserFileUpload.html', uname=session['uname'])
 
 
 @app.route("/usfileupload", methods=['GET', 'POST'])
 def usfileupload():
+    if 'uname' not in session:
+        flash('Session expired. Please log in again.')
+        return redirect('/UserLogin')
+
     if request.method == 'POST':
         oname = session['uname']
-        info = request.form['info']
-        file = request.files['file']
-        import random
-        fnew = random.randint(111, 999)
-        savename = str(fnew) + file.filename
+        info  = request.form.get('info', '')
+        file  = request.files.get('file')
 
-        APP_DIR = _os.path.dirname(_os.path.abspath(__file__))
-
-        file.save(_os.path.join(APP_DIR, "static", "upload", savename))
-
-        secp_k = generate_key()
-        privhex = secp_k.to_hex()
-        pubhex = secp_k.public_key.format(True).hex()
-
-        filepath    = _os.path.join(APP_DIR, "static", "upload",   savename)
-        newfilepath1 = _os.path.join(APP_DIR, "static", "Encrypt",  savename)
-        newfilepath2 = _os.path.join(APP_DIR, "static", "Decrypt",  savename)
-
-        with open(filepath, "rb") as File:
-            data = base64.b64encode(File.read())  # encode file bytes to base64
-
-        print("Private_key:", privhex, "\nPublic_key:", pubhex)
-
-        if privhex == 'null':
-            flash('Please Choose Another File, file corrupted!')
+        if not file or file.filename == '':
+            flash('No file selected.')
             return render_template('UserFileUpload.html', uname=oname)
 
-        else:
-            encrypted_secp = encrypt(pubhex, data)
+        import random
+        fnew     = random.randint(111, 999)
+        savename = str(fnew) + file.filename
 
-            with open(newfilepath1, "wb") as EFile:
-                EFile.write(base64.b64encode(encrypted_secp))
+        APP_DIR       = _os.path.dirname(_os.path.abspath(__file__))
+        upload_path   = _os.path.join(APP_DIR, "static", "upload",  savename)
+        encrypt_path  = _os.path.join(APP_DIR, "static", "Encrypt", savename)
 
-            conn = get_db()
+        try:
+            file.save(upload_path)
+
+            secp_k  = generate_key()
+            privhex = secp_k.to_hex()
+            pubhex  = secp_k.public_key.format(True).hex()
+
+            with open(upload_path, "rb") as f:
+                raw_b64 = base64.b64encode(f.read())
+
+            encrypted_bytes = encrypt(pubhex, raw_b64)
+
+            with open(encrypt_path, "wb") as ef:
+                ef.write(base64.b64encode(encrypted_bytes))
+
+            conn   = get_db()
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM filetb")
-            data2 = cursor.fetchone()
 
-            if data2:
-                cursor.execute("SELECT max(id) FROM filetb")
-                da = cursor.fetchone()
-                if da:
-                    d = da[0]
-                    print(d)
+            # Hash chaining for tamper detection
+            cursor.execute("SELECT hash2 FROM filetb ORDER BY id DESC LIMIT 1")
+            last_row = cursor.fetchone()
+            hash1 = last_row[0] if last_row else '0'
 
-                cursor.execute("SELECT * FROM filetb WHERE id=?", (d,))
-                data1 = cursor.fetchone()
-                if data1:
-                    hash1 = data1[7]
-                    num1 = random.randrange(1111, 9999)
-                    hash2 = create_sha256_signature("E49756B4C8FAB4E48222A3E7F3B97CC3", str(num1))
+            num1  = random.randrange(1111, 9999)
+            hash2 = create_sha256_signature("E49756B4C8FAB4E48222A3E7F3B97CC3", str(num1))
 
-                    cursor.execute(
-                        "INSERT INTO filetb (OwnerName, FileInfo, FileName, Pukey, Pvkey, hash1, hash2) VALUES (?,?,?,?,?,?,?)",
-                        (oname, info, savename, pubhex, privhex, hash1, hash2))
-                    conn.commit()
-                    conn.close()
-                    flash('File Upload And Encrypt Successfully ')
-                    return render_template('UserFileUpload.html', pkey=privhex, oname=oname)
+            cursor.execute(
+                "INSERT INTO filetb (OwnerName, FileInfo, FileName, Pukey, Pvkey, hash1, hash2) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (oname, info, savename, pubhex, privhex, hash1, hash2))
+            conn.commit()
+            conn.close()
 
-            else:
-                hash1 = '0'
-                num1 = random.randrange(1111, 9999)
-                hash2 = create_sha256_signature("E49756B4C8FAB4E48222A3E7F3B97CC3", str(num1))
-                cursor.execute(
-                    "INSERT INTO filetb (OwnerName, FileInfo, FileName, Pukey, Pvkey, hash1, hash2) VALUES (?,?,?,?,?,?,?)",
-                    (oname, info, savename, pubhex, privhex, hash1, hash2))
-                conn.commit()
-                conn.close()
-                flash('File Upload And Encrypt Successfully ')
-                return render_template('UserFileUpload.html', pkey=privhex, oname=oname)
+            flash('File uploaded and encrypted successfully!')
+            return render_template('UserFileUpload.html', pkey=privhex, oname=oname)
+
+        except Exception as e:
+            print("[usfileupload ERROR]", e)
+            flash(f'Upload failed: {str(e)}')
+            return render_template('UserFileUpload.html', uname=oname)
+
+    return render_template('UserFileUpload.html', uname=session.get('uname', ''))
 
 
 @app.route('/UserFileInfo')
 def UserFileInfo():
+    if 'uname' not in session:
+        flash('Session expired. Please log in again.')
+        return redirect('/UserLogin')
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM filetb WHERE OwnerName=?", (session['uname'],))
@@ -796,6 +792,9 @@ def UserFileInfo():
 
 @app.route("/UDownload")
 def UDownload():
+    if 'uname' not in session:
+        flash('Session expired. Please log in again.')
+        return redirect('/UserLogin')
     uname = session['uname']
     return render_template('UDownload.html')
 
@@ -817,20 +816,24 @@ def search():
 
 @app.route("/Decryptkey")
 def Decryptkey():
+    if 'uname' not in session:
+        flash('Session expired. Please log in again.')
+        return redirect('/UserLogin')
+
     ufid = request.args.get('ufid')
     session["ufid"] = ufid
 
-    uname = session['uname']
-    email = ""
+    uname  = session['uname']
+    email  = ""
     prikey = ""
-    conn = get_db()
+    conn   = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM regtb WHERE username=?", (uname,))
     data1 = cursor.fetchone()
     if data1:
         email = data1[3]
 
-    cursor.execute("SELECT * FROM filetb WHERE id=?", (session["ufid"],))
+    cursor.execute("SELECT * FROM filetb WHERE id=?", (ufid,))
     data = cursor.fetchone()
     conn.close()
     if data:
@@ -838,11 +841,11 @@ def Decryptkey():
 
     session['prikey'] = prikey
 
-    mailmsg = "File Id" + ufid + "\nDecryptkey:" + prikey
+    mailmsg = "File Id: " + str(ufid) + "\nDecrypt Key: " + prikey
 
     sendmail(email, mailmsg)
 
-    flash("Decrypt File  Key Send To User..!")
+    flash("Decrypt key sent to your registered email!")
 
     return render_template('DecryptFile.html')
 
