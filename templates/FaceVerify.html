@@ -1,0 +1,194 @@
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>FIDO Cloud - Face Verification</title>
+    <link rel="stylesheet" href="../static/assets/css/style-starter.css">
+    <link href="//fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      .camera-box { position:relative; display:inline-block; border-radius:12px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.25); }
+      #video { display:block; width:480px; max-width:100%; background:#000; }
+      #overlay { position:absolute; top:0; left:0; }
+      .status-box { margin:16px auto; padding:12px 24px; border-radius:8px; max-width:480px; font-weight:500; }
+      .status-loading { background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+      .status-ready   { background:#d4edda; color:#155724; border:1px solid #28a745; }
+      .status-error   { background:#f8d7da; color:#721c24; border:1px solid #dc3545; }
+      .status-success { background:#d1ecf1; color:#0c5460; border:1px solid #17a2b8; }
+      .btn-verify { padding:12px 36px; font-size:16px; border-radius:8px; background:#007bff; color:#fff; border:none; cursor:pointer; margin:8px; }
+      .btn-verify:disabled { background:#aaa; cursor:not-allowed; }
+      .progress-ring { width:60px; height:60px; margin:8px auto; display:none; }
+    </style>
+  </head>
+  <body>
+
+<section class="w3l-header-4 header-sticky">
+  <header id="site-header" class="fixed-top">
+    <div class="container">
+      <nav class="navbar navbar-expand-lg navbar-dark stroke">
+        <h1><a class="navbar-brand" href="/"><span class="fa fas fa-server"></span> FIDO Cloud Authentication</a></h1>
+      </nav>
+    </div>
+  </header>
+</section>
+
+<script src="../static/assets/js/jquery-3.3.1.min.js"></script>
+<script src="../static/assets/js/bootstrap.min.js"></script>
+
+<section class="w3l-inner-banner-main" style="padding-top:100px;">
+  <div class="about-inner about editContent">
+    <div class="container">
+      <div class="breadcrumbs-sub">
+        <ul class="breadcrumbs-custom-path">
+          <li class="right-side propClone"><a href="/" class="editContent">Home <span class="fa fa-angle-right"></span></a></li>
+          <li>Face Verification</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="w3l-contact-info-main" id="contact" style="padding:40px 0;">
+  <div class="container text-center">
+    <h3 class="header-name" style="margin-bottom:8px;">🔍 Face Verification</h3>
+    <p style="color:#666; margin-bottom:20px;">Look at the camera and click <strong>Verify My Face</strong></p>
+
+    <div id="statusBox" class="status-box status-loading">⏳ Loading face recognition models, please wait...</div>
+
+    <div class="camera-box" style="margin:0 auto; display:block; text-align:center;">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div style="margin-top:16px;">
+      <button id="verifyBtn" class="btn-verify" disabled>🔐 Verify My Face</button>
+    </div>
+    <p style="color:#888; font-size:13px; margin-top:8px;">
+      ⚠️ If someone else is detected, your account owner will be alerted by email.
+    </p>
+  </div>
+</section>
+
+<section class="w3l-footer-29-main">
+  <div class="footer-29 py-4">
+    <div class="container">
+      <div class="bottom-copies text-center">
+        <p class="copy-footer-29">© FIDO Cloud Authentication. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- face-api.js -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<script>
+  const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const statusBox = document.getElementById('statusBox');
+  const verifyBtn = document.getElementById('verifyBtn');
+
+  let detectionInterval = null;
+
+  function setStatus(msg, type) {
+    statusBox.textContent = msg;
+    statusBox.className = 'status-box status-' + type;
+  }
+
+  async function loadModels() {
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      ]);
+      setStatus('✅ Models loaded. Starting camera...', 'ready');
+      await startCamera();
+    } catch (err) {
+      setStatus('❌ Failed to load models: ' + err.message, 'error');
+    }
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360 } });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        overlay.width  = video.videoWidth;
+        overlay.height = video.videoHeight;
+        startDetection();
+        verifyBtn.disabled = false;
+        setStatus('✅ Camera ready. Look at camera and click Verify.', 'ready');
+      };
+    } catch (err) {
+      setStatus('❌ Camera access denied: ' + err.message, 'error');
+    }
+  }
+
+  function startDetection() {
+    const ctx = overlay.getContext('2d');
+    detectionInterval = setInterval(async () => {
+      const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                              .withFaceLandmarks();
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      if (detection) {
+        const { x, y, width, height } = detection.detection.box;
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth   = 3;
+        ctx.strokeRect(x, y, width, height);
+        ctx.fillStyle = 'rgba(0,123,255,0.1)';
+        ctx.fillRect(x, y, width, height);
+      }
+    }, 200);
+  }
+
+  verifyBtn.addEventListener('click', async () => {
+    setStatus('🔍 Scanning face, please hold still...', 'loading');
+    verifyBtn.disabled = true;
+
+    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                            .withFaceLandmarks().withFaceDescriptor();
+    if (!detection) {
+      setStatus('⚠️ No face detected. Please look directly at the camera.', 'error');
+      verifyBtn.disabled = false;
+      return;
+    }
+
+    const descriptor = Array.from(detection.descriptor);
+
+    // Capture current frame as image for security alert
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width  = video.videoWidth;
+    snapCanvas.height = video.videoHeight;
+    snapCanvas.getContext('2d').drawImage(video, 0, 0);
+    const imageBase64 = snapCanvas.toDataURL('image/jpeg', 0.7);
+
+    setStatus('📡 Verifying with server...', 'loading');
+
+    try {
+      const res = await fetch('/verify-face', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descriptor: descriptor, image: imageBase64 })
+      });
+      const result = await res.json();
+      if (result.success) {
+        setStatus('✅ Face verified! Proceeding to FIDO Key verification...', 'success');
+        clearInterval(detectionInterval);
+        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+        setTimeout(() => { window.location.href = '/facelogin'; }, 1200);
+      } else {
+        setStatus('❌ ' + (result.message || 'Verification failed. Try again.'), 'error');
+        verifyBtn.disabled = false;
+      }
+    } catch (err) {
+      setStatus('❌ Network error: ' + err.message, 'error');
+      verifyBtn.disabled = false;
+    }
+  });
+
+  loadModels();
+</script>
+</body>
+</html>

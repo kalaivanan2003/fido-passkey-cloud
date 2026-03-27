@@ -1,0 +1,208 @@
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>FIDO Cloud - QR Code Scan</title>
+    <link rel="stylesheet" href="../static/assets/css/style-starter.css">
+    <link href="//fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      .camera-box { position:relative; display:inline-block; border-radius:12px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.25); }
+      #video { display:block; width:480px; max-width:100%; background:#000; }
+      #overlay { position:absolute; top:0; left:0; }
+      .status-box { margin:16px auto; padding:12px 24px; border-radius:8px; max-width:480px; font-weight:500; }
+      .status-loading { background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+      .status-ready   { background:#d4edda; color:#155724; border:1px solid #28a745; }
+      .status-error   { background:#f8d7da; color:#721c24; border:1px solid #dc3545; }
+      .status-success { background:#d1ecf1; color:#0c5460; border:1px solid #17a2b8; }
+      .qr-frame {
+        position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+        width:200px; height:200px; border:3px solid rgba(255,255,255,0.7);
+        border-radius:12px; pointer-events:none;
+      }
+      .qr-frame::before, .qr-frame::after,
+      .qr-frame > span::before, .qr-frame > span::after {
+        content:''; position:absolute; width:24px; height:24px; border-color:#00e5ff; border-style:solid;
+      }
+      .qr-frame::before { top:-3px; left:-3px; border-width:4px 0 0 4px; border-radius:4px 0 0 0; }
+      .qr-frame::after  { top:-3px; right:-3px; border-width:4px 4px 0 0; border-radius:0 4px 0 0; }
+      .qr-frame > span::before { bottom:-3px; left:-3px; border-width:0 0 4px 4px; border-radius:0 0 0 4px; }
+      .qr-frame > span::after  { bottom:-3px; right:-3px; border-width:0 4px 4px 0; border-radius:0 0 4px 0; }
+      .scan-line {
+        position:absolute; left:10px; right:10px; height:2px;
+        background:linear-gradient(90deg, transparent, #00e5ff, transparent);
+        animation: scanAnim 2s linear infinite;
+        border-radius:2px;
+      }
+      @keyframes scanAnim { 0%{top:10px;} 100%{top:190px;} }
+    </style>
+  </head>
+  <body>
+
+<section class="w3l-header-4 header-sticky">
+  <header id="site-header" class="fixed-top">
+    <div class="container">
+      <nav class="navbar navbar-expand-lg navbar-dark stroke">
+        <h1><a class="navbar-brand" href="/"><span class="fa fas fa-server"></span> FIDO Cloud Authentication</a></h1>
+      </nav>
+    </div>
+  </header>
+</section>
+
+<script src="../static/assets/js/jquery-3.3.1.min.js"></script>
+<script src="../static/assets/js/bootstrap.min.js"></script>
+
+<section class="w3l-inner-banner-main" style="padding-top:100px;">
+  <div class="about-inner about editContent">
+    <div class="container">
+      <div class="breadcrumbs-sub">
+        <ul class="breadcrumbs-custom-path">
+          <li class="right-side propClone"><a href="/" class="editContent">Home <span class="fa fa-angle-right"></span></a></li>
+          <li>QR Code Scan</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="w3l-contact-info-main" id="contact" style="padding:40px 0;">
+  <div class="container text-center">
+    <h3 class="header-name" style="margin-bottom:8px;">📷 QR Code Verification</h3>
+    <p style="color:#666; margin-bottom:20px;">
+      Hold your <strong>FIDO QR code</strong> (received via email) in front of the camera
+    </p>
+
+    <div id="statusBox" class="status-box status-loading">⏳ Starting camera...</div>
+
+    <div class="camera-box" style="margin:0 auto; display:block; text-align:center;">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div class="qr-frame"><span></span><div class="scan-line"></div></div>
+    </div>
+
+    <p style="color:#888; font-size:13px; margin-top:16px;">
+      🔄 Scanning automatically — no button needed
+    </p>
+  </div>
+</section>
+
+<section class="w3l-footer-29-main">
+  <div class="footer-29 py-4">
+    <div class="container">
+      <div class="bottom-copies text-center">
+        <p class="copy-footer-29">© FIDO Cloud Authentication. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- jsQR library for QR code detection -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+<script>
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const statusBox = document.getElementById('statusBox');
+
+  let scanning    = true;
+  let lastSent    = '';
+
+  function setStatus(msg, type) {
+    statusBox.textContent = msg;
+    statusBox.className   = 'status-box status-' + type;
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: 480, height: 360 }
+      });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        overlay.width  = video.videoWidth;
+        overlay.height = video.videoHeight;
+        setStatus('✅ Camera ready. Show your QR code...', 'ready');
+        requestAnimationFrame(tick);
+      };
+    } catch (err) {
+      setStatus('❌ Camera error: ' + err.message + '. Please allow camera access.', 'error');
+    }
+  }
+
+  function drawBox(location, color) {
+    const ctx = overlay.getContext('2d');
+    ctx.beginPath();
+    ctx.moveTo(location.topLeftCorner.x,     location.topLeftCorner.y);
+    ctx.lineTo(location.topRightCorner.x,    location.topRightCorner.y);
+    ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
+    ctx.lineTo(location.bottomLeftCorner.x,  location.bottomLeftCorner.y);
+    ctx.closePath();
+    ctx.lineWidth   = 4;
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = 'rgba(0,229,255,0.1)';
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+      // Draw video frame to hidden canvas for jsQR
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width  = video.videoWidth;
+      tmpCanvas.height = video.videoHeight;
+      const tmpCtx = tmpCanvas.getContext('2d');
+      tmpCtx.drawImage(video, 0, 0);
+      const imageData = tmpCtx.getImageData(0, 0, tmpCanvas.width, tmpCanvas.height);
+
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+
+      if (code && code.data && code.data !== lastSent) {
+        drawBox(code.location, '#00e5ff');
+        lastSent = code.data;
+        setStatus('🔍 QR code detected! Verifying...', 'loading');
+        scanning = false;
+        sendQrData(code.data);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  async function sendQrData(qrData) {
+    try {
+      const res = await fetch('/verify-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrData: qrData })
+      });
+      const result = await res.json();
+      if (result.success) {
+        setStatus('🎉 QR Code verified! Logging you in...', 'success');
+        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+        setTimeout(() => { window.location.href = '/UserHome'; }, 1200);
+      } else {
+        setStatus('❌ ' + (result.message || 'Invalid QR code. Try again.'), 'error');
+        lastSent  = '';
+        scanning  = true;
+        setTimeout(() => {
+          setStatus('✅ Camera ready. Show your QR code again...', 'ready');
+          requestAnimationFrame(tick);
+        }, 2500);
+      }
+    } catch (err) {
+      setStatus('❌ Network error: ' + err.message, 'error');
+      lastSent = '';
+      scanning  = true;
+      requestAnimationFrame(tick);
+    }
+  }
+
+  startCamera();
+</script>
+</body>
+</html>

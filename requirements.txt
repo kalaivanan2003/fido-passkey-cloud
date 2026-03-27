@@ -1,0 +1,9 @@
+flask
+eciespy
+qrcode
+opencv-python-headless
+cryptography
+pillow
+requests
+numpy
+gunicorn
