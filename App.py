@@ -166,56 +166,65 @@ def xor_hex_strings(hex1, hex2):
 
 @app.route("/Approved")
 def Approved():
-    uid = request.args.get('lid')
+    uid   = request.args.get('lid')
     email = request.args.get('email')
     prkey = ""
 
-    conn = get_db()
+    conn   = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT  *  FROM  regtb where  id=?", (uid,))
+    cursor.execute("SELECT * FROM regtb WHERE id=?", (uid,))
     data = cursor.fetchone()
     if data:
-        prkey = data[9]
+        prkey = data[9]   # Prikey column
 
-    secp_k = generate_key()
+    secp_k   = generate_key()
     privhex1 = secp_k.to_hex()
-    # pubhex = secp_k.public_key.format(True).hex()
-    prikey2 = xor_hex_strings(prkey, privhex1)
+    prikey2  = xor_hex_strings(prkey, privhex1)
 
-    print(prikey2)
-
-    sendmail(email, "FIDOKEY:" + prikey2 + "\nServer Process Completed Awaiting Backup Server")
-
+    # ── DB UPDATE FIRST (so approval is never lost even if email fails) ──
     cursor.execute(
         "UPDATE regtb SET Status='awaiting backup server', prikey1=?, prikey2=? WHERE id=?",
         (privhex1, prikey2, uid))
     conn.commit()
 
+    # ── Attempt email (non-fatal) ────────────────────────────────────────
+    mail_ok = sendmail(email,
+        "FIDO Cloud: Server has approved your registration.\n"
+        "FIDOKEY: " + prikey2 + "\n"
+        "Status: Awaiting Backup Server approval.")
+
     cursor.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
-    data = cursor.fetchall()
+    data  = cursor.fetchall()
     cursor.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cursor.fetchall()
     conn.close()
+
+    if mail_ok:
+        flash('User approved! FIDO key sent to their email.')
+    else:
+        flash('User approved! (Email notification failed — please notify the user manually.)')
+
     return render_template('ServerHome.html', data=data, data1=data1)
 
 
 @app.route("/Reject")
 def Reject():
-    id = request.args.get('lid')
+    id    = request.args.get('lid')
     email = request.args.get('email')
-    message = "Your Request  Rejected"
-    sendmail(email, message)
 
-    conn = get_db()
+    conn   = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE regtb SET Status='reject' WHERE id=?", (id,))
     conn.commit()
 
+    sendmail(email, "FIDO Cloud: Your registration request has been rejected.")
+
     cursor.execute("SELECT * FROM regtb WHERE LOWER(status)='waiting'")
-    data = cursor.fetchall()
+    data  = cursor.fetchall()
     cursor.execute("SELECT * FROM regtb WHERE LOWER(status)!='waiting'")
     data1 = cursor.fetchall()
     conn.close()
+    flash('User rejected.')
 
     return render_template('ServerHome.html', data=data, data1=data1)
 
@@ -915,37 +924,27 @@ def fdecrypt():
 
 
 def sendmail(Mailid, message):
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    from email.mime.base import MIMEBase
-    from email import encoders
-    fromaddr = "projectmailm@gmail.com"
-    toaddr = Mailid
-    # instance of MIMEMultipart
-    msg = MIMEMultipart()
-    # storing the senders email address
-    msg['From'] = fromaddr
-    # storing the receivers email address
-    msg['To'] = toaddr
-    # storing the subject
-    msg['Subject'] = "Alert"
-    # string to store the body of the mail
-    body = message
-    # attach the body with the msg instance
-    msg.attach(MIMEText(body, 'plain'))
-    # creates SMTP session
-    s = smtplib.SMTP('smtp.gmail.com', 587)
-    # start TLS for security
-    s.starttls()
-    # Authentication
-    s.login(fromaddr, "kkvz xxke jmeb pcyb")
-    # Converts the Multipart msg into a string
-    text = msg.as_string()
-    # sending the mail
-    s.sendmail(fromaddr, toaddr, text)
-    # terminating the session
-    s.quit()
+    """Send email. Returns True on success, False on failure (never raises)."""
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        fromaddr = "projectmailm@gmail.com"
+        msg = MIMEMultipart()
+        msg['From']    = fromaddr
+        msg['To']      = Mailid
+        msg['Subject'] = "FIDO Cloud Authentication - Alert"
+        msg.attach(MIMEText(message, 'plain'))
+        s = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
+        s.starttls()
+        s.login(fromaddr, "kkvz xxke jmeb pcyb")
+        s.sendmail(fromaddr, Mailid, msg.as_string())
+        s.quit()
+        print(f"[MAIL] Sent to {Mailid}")
+        return True
+    except Exception as e:
+        print(f"[MAIL ERROR] Could not send to {Mailid}: {e}")
+        return False
 
 
 if __name__ == '__main__':
