@@ -717,32 +717,29 @@ def usfileupload():
         fnew = random.randint(111, 999)
         savename = str(fnew) + file.filename
 
-        file.save("static/upload/" + savename)
+        APP_DIR = _os.path.dirname(_os.path.abspath(__file__))
+
+        file.save(_os.path.join(APP_DIR, "static", "upload", savename))
 
         secp_k = generate_key()
         privhex = secp_k.to_hex()
         pubhex = secp_k.public_key.format(True).hex()
 
-        filepath = "./static/upload/" + savename
-        head, tail = os.path.split(filepath)
+        filepath    = _os.path.join(APP_DIR, "static", "upload",   savename)
+        newfilepath1 = _os.path.join(APP_DIR, "static", "Encrypt",  savename)
+        newfilepath2 = _os.path.join(APP_DIR, "static", "Decrypt",  savename)
 
-        newfilepath1 = './static/Encrypt/' + str(tail)
-        newfilepath2 = './static/Decrypt/' + str(tail)
-
-        data = 0
         with open(filepath, "rb") as File:
-            data = base64.b64encode(File.read())  # convert binary to string data to read file
+            data = base64.b64encode(File.read())  # encode file bytes to base64
 
-        print("Private_key:", privhex, "\nPublic_key:", pubhex, "Type: ", type(privhex))
+        print("Private_key:", privhex, "\nPublic_key:", pubhex)
 
         if privhex == 'null':
-            flash('Please Choose Another File,file corrupted!')
-            return render_template('OwnerFileUpload.html')
+            flash('Please Choose Another File, file corrupted!')
+            return render_template('UserFileUpload.html', uname=oname)
 
         else:
-            print("Binary of the file:", data)
             encrypted_secp = encrypt(pubhex, data)
-            print("Encrypted binary:", encrypted_secp)
 
             with open(newfilepath1, "wb") as EFile:
                 EFile.write(base64.b64encode(encrypted_secp))
@@ -854,46 +851,63 @@ def Decryptkey():
 def fdecrypt():
     if request.method == 'POST':
 
-        prkey = request.form['prkey']
+        prkey = request.form.get('prkey', '').strip()
+        stored_prikey = session.get('prikey', '')
+        ufid = session.get('ufid')
 
-        if prkey == session['prikey']:
+        if not ufid:
+            flash('Session expired. Please request the decrypt key again.')
+            return render_template('DecryptFile.html')
 
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM filetb WHERE id=?", (session["ufid"],))
-            data = cursor.fetchone()
-            conn.close()
-            if data:
-                prkey = data[5]
-                fname = data[3]
-
-            else:
-                return 'Incorrect username / password !'
-
-            privhex = prkey
-
-            filepath = "./static/Encrypt/" + fname
-            head, tail = os.path.split(filepath)
-
-            newfilepath1 = './static/Encrypt/' + str(tail)
-            newfilepath2 = './static/Decrypt/' + str(tail)
-
-            data = 0
-            with open(newfilepath1, "rb") as File:
-                data = base64.b64decode(File.read())
-
-            print(data)
-            decrypted_secp = decrypt(privhex, data)
-            print("\nDecrypted:", decrypted_secp)
-            with open(newfilepath2, "wb") as DFile:
-                DFile.write(base64.b64decode(decrypted_secp))
-
-            return send_file(newfilepath2, as_attachment=True)
-
-
-        else:
-
+        if prkey != stored_prikey:
             flash('Decrypt Key Verification Failed..!')
+            return render_template('DecryptFile.html')
+
+        # Fetch file record
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM filetb WHERE id=?", (ufid,))
+        data = cursor.fetchone()
+        conn.close()
+
+        if not data:
+            flash('File record not found!')
+            return render_template('DecryptFile.html')
+
+        privhex = data[5]
+        fname   = data[3]
+
+        APP_DIR      = _os.path.dirname(_os.path.abspath(__file__))
+        enc_path     = _os.path.join(APP_DIR, 'static', 'Encrypt', fname)
+        dec_path     = _os.path.join(APP_DIR, 'static', 'Decrypt', fname)
+
+        # Check encrypted file exists
+        if not _os.path.exists(enc_path):
+            flash(f'Encrypted file not found on server: {fname}')
+            return render_template('DecryptFile.html')
+
+        try:
+            with open(enc_path, "rb") as f:
+                encrypted_b64 = f.read()
+
+            # Undo outer base64 wrapper applied during upload
+            encrypted_bytes = base64.b64decode(encrypted_b64)
+
+            # ECIES decrypt — gives back the inner base64-encoded original file bytes
+            decrypted_b64 = decrypt(privhex, encrypted_bytes)
+
+            # Undo inner base64 to recover original file content
+            original_bytes = base64.b64decode(decrypted_b64)
+
+            with open(dec_path, "wb") as f:
+                f.write(original_bytes)
+
+            return send_file(dec_path, as_attachment=True,
+                             download_name=fname)
+
+        except Exception as e:
+            print("[fdecrypt ERROR]", e)
+            flash(f'Decryption failed: {str(e)}')
             return render_template('DecryptFile.html')
 
 
