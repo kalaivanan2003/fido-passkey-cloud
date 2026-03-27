@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 REPO_URL="https://github.com/kalaivanan2003/FIDO-passkey.git"
-PROJECT_DIR="$HOME/projects/FIDO-passkey"
+PROJECT_DIR="$HOME/projects/fido-passkey-cloud"
 
 print_step() { echo -e "${YELLOW}$1${NC}"; }
 print_ok()   { echo -e "${GREEN}✔ $1${NC}"; }
@@ -64,7 +64,7 @@ print_ok "Static folders created."
 # ──────────────────────────────────────────────────────────
 # STEP 4: Python Virtual Environment & Packages
 # ──────────────────────────────────────────────────────────
-print_step "[STEP 4/6] Setting up Python environment..."
+print_step "[STEP 4/5] Setting up Python environment..."
 if [ ! -f "venv/bin/python" ]; then
     python3 -m venv venv
 fi
@@ -74,16 +74,9 @@ pip install -r requirements.txt -q
 print_ok "Python packages installed."
 
 # ──────────────────────────────────────────────────────────
-# STEP 5: Initialise SQLite Database (safe to re-run)
+# STEP 5: Check Flask host configuration
 # ──────────────────────────────────────────────────────────
-print_step "[STEP 5/6] Initialising SQLite database..."
-python init_db.py
-print_ok "SQLite database ready (fidoclouddb.sqlite)."
-
-# ──────────────────────────────────────────────────────────
-# STEP 6: Check Flask host configuration
-# ──────────────────────────────────────────────────────────
-print_step "[STEP 6/6] Checking Flask host configuration..."
+print_step "[STEP 5/5] Checking Flask host configuration..."
 if grep -q "app.run(debug=True)" App.py; then
     sed -i "s/app.run(debug=True)/app.run(host='0.0.0.0', port=5000, debug=True)/" App.py
     print_ok "App.py patched to listen on 0.0.0.0:5000"
